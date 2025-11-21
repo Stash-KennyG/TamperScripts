@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Data Matches for StashResults
 // @namespace    http://kennyg.com/
-// @version      1.9
+// @version      1.10
 // @description  Highlights components of the matches from StashBox
 // @author       KennyG
 // @match        *://localhost:9999/scenes*
 // @match        *://localhost:9999/groups*
+// @match        *://localhost:9999/performers*
 // @grant        none
 // @run-at       document-end
 // @icon         https://raw.githubusercontent.com/stashapp/stash/develop/ui/v2.5/public/favicon.png
@@ -196,9 +197,29 @@
             rowcount++
             // Get potential fields (optional-field-content) inside the search-item
             let resultFields = searchItem.querySelectorAll('.optional-field-content');
-            // Get the Title (scene name) and full card text (includes filename, etc.)
-            let titleText = searchItem.querySelector('a.scene-link').textContent.trim(); // Scene title text
-            let cardText = searchItem.textContent.trim(); // Full text of the search item (including filename)
+            // Get the Title (scene name)
+            const titleEl = searchItem.querySelector('a.scene-link');
+            let titleText = titleEl ? titleEl.textContent.trim() : ''; // Scene title text
+
+            // Also include the processed query input (text-input form-control), if present.
+            // Stash normalizes this (e.g. prefixes "20" for years, dot→space, etc.),
+            // so combining it with the title gives a richer matching source.
+            let queryText = '';
+            const queryInput = searchItem.querySelector('input.text-input.form-control');
+            if (queryInput && typeof queryInput.value === 'string') {
+                queryText = queryInput.value.trim();
+            }
+
+            let combinedText = titleText;
+            if (queryText) {
+                combinedText = (combinedText + ' ' + queryText).trim();
+            }
+
+            // Debug: show the combined parse string we use for non-date/entity matching
+            //console.log('[DataMatchHighlighter] combinedText:', combinedText);
+
+            // Full card text (includes filename etc.) is still used for date patterns.
+            let cardText = searchItem.textContent.trim();
 
             // Loop through the date fields and find and highlight the matches
             resultFields.forEach(field => {
@@ -223,14 +244,14 @@
                         highlightField(field);
                     }
                 } else {
-                    if (titleText.includes(matchText))
+                    if (combinedText.includes(matchText))
                     {
                         // Highlight the date field in green and change the text color to white
                         highlightField(field);
                     }
                     else
                     {
-                        multiHighlight(field,titleText);
+                        multiHighlight(field, combinedText);
                     }
                 }
             });
@@ -241,7 +262,7 @@
                 // Normalize entity text and title by lowercasing and removing apostrophes
                 let matchText = obfield.textContent.split(':')[1].toLowerCase().trim().replace(/'/g, "");
                 let matchLabel = obfield.textContent.split(':')[0].trim();
-                const normalizedTitle = titleText.toLowerCase().replace(/'/g, "");
+                const normalizedTitle = combinedText.toLowerCase().replace(/'/g, "");
 
                 if (normalizedTitle.includes(matchText)){
                     addVerifiedIcon(obfield, `${matchLabel} found in filename`);
