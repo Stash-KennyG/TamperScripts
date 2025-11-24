@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Data Matches for StashResults
 // @namespace    http://kennyg.com/
-// @version      1.10
+// @version      1.11
 // @description  Highlights components of the matches from StashBox
 // @author       KennyG
 // @match        *://localhost:9999/scenes*
@@ -197,29 +197,31 @@
             rowcount++
             // Get potential fields (optional-field-content) inside the search-item
             let resultFields = searchItem.querySelectorAll('.optional-field-content');
-            // Get the Title (scene name)
-            const titleEl = searchItem.querySelector('a.scene-link');
-            let titleText = titleEl ? titleEl.textContent.trim() : ''; // Scene title text
 
-            // Also include the processed query input (text-input form-control), if present.
+            // Build the "source" text from the TOP of the card only:
+            // [a.scene-link.overflow-hidden] + [text-input form-control].
+            // This is the query/filename we want to validate the LOWER metadata against.
+            let sourceText = '';
+            const sourceLink = searchItem.querySelector('a.scene-link.overflow-hidden');
+            if (sourceLink && sourceLink.textContent) {
+                sourceText = sourceLink.textContent.trim();
+            }
+
+            // Also include the processed query input (global text-input form-control), if present.
             // Stash normalizes this (e.g. prefixes "20" for years, dot→space, etc.),
-            // so combining it with the title gives a richer matching source.
+            // so combining it with the filename text gives the full search "haystack".
             let queryText = '';
-            const queryInput = searchItem.querySelector('input.text-input.form-control');
+            const queryInput = document.querySelector('input.text-input.form-control, input.text-input');
             if (queryInput && typeof queryInput.value === 'string') {
                 queryText = queryInput.value.trim();
             }
 
-            let combinedText = titleText;
             if (queryText) {
-                combinedText = (combinedText + ' ' + queryText).trim();
+                sourceText = (sourceText + ' ' + queryText).trim();
             }
 
-            // Debug: show the combined parse string we use for non-date/entity matching
-            //console.log('[DataMatchHighlighter] combinedText:', combinedText);
-
-            // Full card text (includes filename etc.) is still used for date patterns.
-            let cardText = searchItem.textContent.trim();
+            // Debug: show the source string we use as the haystack (top block only)
+            //console.log('[DataMatchHighlighter] sourceText:', sourceText);
 
             // Loop through the date fields and find and highlight the matches
             resultFields.forEach(field => {
@@ -232,8 +234,10 @@
 
                 let isoDateMatch = field.textContent.match(/^\d{4}-\d{2}-\d{2}$/); // Check for ISO date format (YYYY-MM-DD)
                 if (isoDateMatch) {
-                    const hasComponents = checkDateInTitle(matchText, cardText);
-                    const verified = isDateVerified(matchText, cardText);
+                    // For dates, we ONLY compare against the top "sourceText" (filename + query).
+                    // No self-match is possible because the result date lives in the lower card.
+                    const hasComponents = checkDateInTitle(matchText, sourceText);
+                    const verified = isDateVerified(matchText, sourceText);
 
                     // If we have a fully verified date pattern, skip highlight and just add the icon
                     if (verified) {
@@ -244,14 +248,14 @@
                         highlightField(field);
                     }
                 } else {
-                    if (combinedText.includes(matchText))
+                    if (sourceText.includes(matchText))
                     {
                         // Highlight the date field in green and change the text color to white
                         highlightField(field);
                     }
                     else
                     {
-                        multiHighlight(field, combinedText);
+                        multiHighlight(field, sourceText);
                     }
                 }
             });
@@ -260,23 +264,33 @@
             let entityFields = searchItem.querySelectorAll('.entity-name');
             entityFields.forEach(obfield => {
                 // Normalize entity text and title by lowercasing and removing apostrophes
-                let matchText = obfield.textContent.split(':')[1].toLowerCase().trim().replace(/'/g, "");
+                let rawText = obfield.textContent.split(':')[1].toLowerCase().trim().replace(/'/g, "");
                 let matchLabel = obfield.textContent.split(':')[0].trim();
-                const normalizedTitle = combinedText.toLowerCase().replace(/'/g, "");
+                const normalizedTitle = sourceText.toLowerCase().replace(/'/g, "");
 
-                if (normalizedTitle.includes(matchText)){
+                // Strip any trailing "(...)" from the entity value
+                let origMatch = rawText.replace(/\s*\(.*?\)\s*$/, "");
+
+                // Candidate forms to match inside the source text:
+                // "First Last"
+                // "FirstLast"
+                // "First.Last"
+                // "First_Last"
+                // "First-Last"
+                const candidates = [
+                    origMatch,
+                    origMatch.replace(/ /g, ""),
+                    origMatch.replace(/ /g, "."),
+                    origMatch.replace(/ /g, "_"),
+                    origMatch.replace(/ /g, "-")
+                ];
+
+                const titleNoApos = normalizedTitle;
+
+                const hit = candidates.some(candidate => titleNoApos.includes(candidate));
+
+                if (hit) {
                     addVerifiedIcon(obfield, `${matchLabel} found in filename`);
-                } else{ //We need to check for studio smush or performer dotSpaces
-                    let origMatch = matchText.replace(/\s*\(.*?\)\s*$/, "");
-                    matchText = origMatch.replace(/ /g, "");
-                    if (normalizedTitle.includes(matchText)){
-                        addVerifiedIcon(obfield, `${matchLabel} found in filename`);
-                    }else{
-                        matchText = origMatch.replace(/ /g, ".");
-                        if (normalizedTitle.includes(matchText)){
-                            addVerifiedIcon(obfield, `${matchLabel} found in filename`);
-                        }
-                    }
                 }
             });
         });
