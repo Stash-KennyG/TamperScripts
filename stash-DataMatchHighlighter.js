@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Data Matches for StashResults
 // @namespace    http://kennyg.com/
-// @version      1.11
+// @version      1.12
 // @description  Highlights components of the matches from StashBox
 // @author       KennyG
 // @match        *://localhost:9999/scenes*
