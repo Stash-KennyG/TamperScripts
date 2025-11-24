@@ -94,13 +94,15 @@
         const [, year, mm, dd] = match;
         const yy = year.slice(2);
 
+        // Allow common delimiters between parts, and don't require strict \b at the left,
+        // because filenames often have an underscore or letter before the year.
         const patterns = [
             // YY.MM.DD, YY-MM-DD, YY MM DD
-            new RegExp(`\\b${yy}[.\\- ]${mm}[.\\- ]${dd}\\b`),
+            new RegExp(`${yy}[.\\- ]${mm}[.\\- ]${dd}`),
             // YYYY.MM.DD, YYYY-MM-DD, YYYY MM DD
-            new RegExp(`\\b${year}[.\\- ]${mm}[.\\- ]${dd}\\b`),
+            new RegExp(`${year}[.\\- ]${mm}[.\\- ]${dd}`),
             // YYMMDD
-            new RegExp(`\\b${yy}${mm}${dd}\\b`)
+            new RegExp(`${yy}${mm}${dd}`)
         ];
 
         const haystack = titleText;
