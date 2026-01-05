@@ -70,9 +70,39 @@ GM_addStyle(
     return { name: cleanName, disambig: dis };
   }
 
-  // IMPORTANT: name-only for matching (disambiguation is display-only)
-  function buildQueryString(sel) {
-    return (sel.name || '').trim();
+  // Always derive the query from the anchor text on the same row as the select,
+  // i.e. the proposed match coming from StashBox, rather than the dropdown value.
+  function getRowSourcePerformerName(selectRoot) {
+    if (!selectRoot || !selectRoot.closest) return null;
+
+    // Nearest "row-like" container for this tagger line
+    const row =
+      selectRoot.closest('.search-item') ||
+      selectRoot.closest('tr') ||
+      selectRoot.closest('.row') ||
+      selectRoot.closest('.tagger-row') ||
+      selectRoot.closest('[role="row"]');
+
+    if (!row) return null;
+
+    // Take the first non-empty anchor text in the row that is NOT part of the
+    // select control or its button group (e.g. not the "Link to existing" button).
+    const anchors = Array.from(row.querySelectorAll('a'));
+    for (const a of anchors) {
+      if (!a.textContent) continue;
+      if (a.closest('.react-select')) continue;
+      if (a.closest('.btn-group')) continue;
+      const text = a.textContent.trim();
+      if (text) return text;
+    }
+
+    return null;
+  }
+
+  //  use the row anchor text for matching.
+  function buildQueryString(selectRoot) {
+    const fromRow = getRowSourcePerformerName(selectRoot);
+    return (fromRow || '').trim();
   }
 
   function positionOverlay(anchorEl) {
@@ -635,8 +665,10 @@ function computeAgeText(birthdate) {
     const sel = getSelectedPerformer(selectRoot);
     if (!sel || !sel.name) return;
 
-    const q = buildQueryString(sel);
-    const key = sel.name + '||' + (sel.disambig || '');
+    const q = buildQueryString(selectRoot);
+    if (!q) return;
+
+    const key = q;
 
     if (overlay && key === lastKey) return;
 
